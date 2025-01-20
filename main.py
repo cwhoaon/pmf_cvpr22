@@ -26,7 +26,6 @@ from models import get_model
 def main(args):
     utils.init_distributed_mode(args)
 
-    print(args)
     device = torch.device(args.device)
 
     # fix the seed for reproducibility
@@ -154,10 +153,10 @@ def main(args):
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
-    max_accuracy = test_stats['acc1']
+    max_accuracy=0
+    # max_accuracy = test_stats['acc1']
 
     for epoch in range(args.start_epoch, args.epochs):
-
         train_stats = train_one_epoch(
             data_loader_train, model, criterion, optimizer, epoch, device,
             loss_scaler, args.fp16, args.clip_grad, model_ema, mixup_fn, writer,

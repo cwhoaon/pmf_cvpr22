@@ -1,13 +1,22 @@
 import os
 import numpy as np
 import torch
-#from timm.models import create_model
+import timm
 from .protonet import ProtoNet
 from .deploy import ProtoNet_Finetune, ProtoNet_Auto_Finetune, ProtoNet_AdaTok, ProtoNet_AdaTok_EntMin
 
 
 def get_backbone(args):
-    if args.arch == 'vit_base_patch16_224_in21k':
+    ################### CAML: CLIP model ###################
+    if args.arch == "vit_base_patch16_clip_224.openai":
+        model = timm.create_model("vit_base_patch16_clip_224.openai",
+                            pretrained=True,
+                            img_size=224,
+                            num_classes=0)
+        print("Pre-trained CLIP (CAML architecture) is loaded")
+    #########################################################
+    
+    elif args.arch == 'vit_base_patch16_224_in21k':
         from .vit_google import VisionTransformer, CONFIGS
 
         config = CONFIGS['ViT-B_16']
@@ -169,6 +178,7 @@ def get_backbone(args):
     else:
         raise ValueError(f'{args.arch} is not conisdered in the current code.')
 
+    # print(model)
     return model
 
 

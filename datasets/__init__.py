@@ -10,7 +10,7 @@ from .episodic_dataset import EpisodeDataset, EpisodeJSONDataset
 from .meta_val_dataset import MetaValDataset
 from .meta_h5_dataset import FullMetaDatasetH5
 from .meta_dataset.utils import Split
-
+import torchvision.transforms as transforms
 
 def get_sets(args):
     if args.dataset == 'cifar_fs':
@@ -19,6 +19,7 @@ def get_sets(args):
         from .cifar_fs_elite import dataset_setting
     elif args.dataset == 'mini_imagenet':
         from .mini_imagenet import dataset_setting
+    
     elif args.dataset == 'meta_dataset':
         if args.eval:
             trainSet = valSet = None
@@ -31,38 +32,106 @@ def get_sets(args):
                                                              f'val_ep{args.nValEpisode}_img{args.image_size}.h5'),
                                                 num_episodes=args.nValEpisode)
             testSet = None
+        
         return trainSet, valSet, testSet
+    
+##################### CAML meta test datasetting #####################
+    elif args.dataset in ['imagenet1k', 'mscoco', 'fungi', 'wikiart_artist', 'wikiart_genre', 'wikiart_style']:
+        mean = [0.4815, 0.4578, 0.4082]
+        std = [0.2686, 0.2613, 0.2758]
+        normalize = transforms.Normalize(mean=mean, std=std)
+        trainTransform = transforms.Compose([transforms.Resize((248, 248)),
+                                            transforms.CenterCrop((args.img_size, args.img_size)),
+                                            transforms.ToTensor(),
+                                            normalize
+                                            ])
+        valTransform = trainTransform
+        
+        trainDir = f"./data/train_data/{args.dataset}/train"
+        print(trainDir)
+        valDir = f"./data/train_data/{args.dataset}/val"
+        inputW, inputH, nbCls = args.img_size, args.img_size, 64
+
+
+##################### CAML meta test datasetting #####################
+    elif args.dataset in ['Aircraft', 'ChestX', 'CUB_Fewshot', 'Meta_iNat', 'Tiered_Meta_iNat', 'Tiered_Mini_ImageNet', 'Pascal_VOC', 'Paintings']:
+        mean = [0.4815, 0.4578, 0.4082]
+        std = [0.2686, 0.2613, 0.2758]
+        normalize = transforms.Normalize(mean=mean, std=std)
+        valTransform = transforms.Compose([transforms.Resize((248, 248)),
+                                            transforms.CenterCrop((args.img_size, args.img_size)),
+                                            transforms.ToTensor(),
+                                            normalize
+                                            ])
+        
+        if args.dataset == 'Aircraft':
+            testset = 'Aircraft_fewshot'
+        elif args.dataset == 'ChestX':
+            testset = 'ChestX'
+        elif args.dataset == 'CUB_Fewshot':
+            testset = 'CUB_fewshot_raw'
+        elif args.datast == 'Meta_iNat':
+            testset = 'meta_iNat'
+        elif args.datast == 'Tiered_Meta_iNat':
+            testset = 'tiered_meta_iNat'
+        elif args.datast == 'Tiered_Mini_ImageNet':
+            testset = 'tiered-ImageNet_DeepEMD'
+        elif args.datast == 'Pascal_VOC':
+            testset = 'v2_pascal'
+        elif args.datast == 'Paintings':
+            testset = 'v2_paintings'
+        
+        testDir = f"./data/test_data/{testset}/test"
+        inputW, inputH, nbCls = args.img_size, args.img_size, 64
+######################################################################
+
     else:
         raise ValueError(f'{dataset} is not supported.')
 
     # If not meta_dataset
-    trainTransform, valTransform, inputW, inputH, \
-    trainDir, valDir, testDir, episodeJson, nbCls = \
-            dataset_setting(args.nSupport, args.img_size)
+    if args.dataset in ['cifar_fs', 'cifar_fs_elite', 'mini_imagenet']:
+        trainTransform, valTransform, inputW, inputH, \
+        trainDir, valDir, testDir, episodeJson, nbCls = \
+                dataset_setting(args.nSupport, args.img_size)
+    
+    trainSet, valSet, testSet = None, None, None
+    
+    if not args.eval:
+        trainSet = EpisodeDataset(imgDir = trainDir,
+                                nCls = args.nClsEpisode,
+                                nSupport = args.nSupport,
+                                nQuery = args.nQuery,
+                                transform = trainTransform,
+                                inputW = inputW,
+                                inputH = inputH,
+                                nEpisode = args.nEpisode)
 
-    trainSet = EpisodeDataset(imgDir = trainDir,
-                              nCls = args.nClsEpisode,
-                              nSupport = args.nSupport,
-                              nQuery = args.nQuery,
-                              transform = trainTransform,
-                              inputW = inputW,
-                              inputH = inputH,
-                              nEpisode = args.nEpisode)
-
-    valSet = EpisodeJSONDataset(episodeJson,
-                                valDir,
-                                inputW,
-                                inputH,
-                                valTransform)
-
-    testSet = EpisodeDataset(imgDir = testDir,
-                             nCls = args.nClsEpisode,
-                             nSupport = args.nSupport,
-                             nQuery = args.nQuery,
-                             transform = valTransform,
-                             inputW = inputW,
-                             inputH = inputH,
-                             nEpisode = args.nEpisode)
+        if args.dataset in ['imagenet1k', 'mscoco', 'fungi', 'wikiart_artist', 'wikiart_genre', 'wikiart_style']:
+            valSet = EpisodeDataset(imgDir = valDir,
+                                    nCls = 5,
+                                    nSupport = 1 if args.nSupport==1 else 5,
+                                    nQuery = 15,
+                                    transform = valTransform,
+                                    inputW = inputW,
+                                    inputH = inputH,
+                                    nEpisode = 1000)
+        
+        else:
+            valSet = EpisodeJSONDataset(episodeJson,
+                                        valDir,
+                                        inputW,
+                                        inputH,
+                                        valTransform)
+    else: 
+        testSet = EpisodeDataset(imgDir = testDir,
+                                nCls = args.nClsEpisode,
+                                nSupport = args.nSupport,
+                                nQuery = args.nQuery,
+                                transform = valTransform,
+                                inputW = inputW,
+                                inputH = inputH,
+                                nEpisode = args.nEpisode)
+    
 
     return trainSet, valSet, testSet
 

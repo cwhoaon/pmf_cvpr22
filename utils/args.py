@@ -22,7 +22,11 @@ def get_args_parser():
                         help='dataset path')
     parser.add_argument('--pretrained-checkpoint-path', default='.', type=str,
                         help='path which contains the directories pretrained_ckpts and pretrained_ckpts_converted')
-    parser.add_argument("--dataset", choices=["cifar_fs_elite", "cifar_fs", "mini_imagenet", "meta_dataset"],
+    #### Add CAML datasets
+    parser.add_argument("--dataset", choices=["cifar_fs_elite", "cifar_fs", "mini_imagenet", "meta_dataset", #original
+                                              'imagenet1k', 'mscoco', 'fungi', 'wikiart_artist', 'wikiart_genre', 'wikiart_style', #CAML meta-train
+                                              'Aircraft', 'ChestX', 'CUB_Fewshot', 'Meta_iNat', 'Tiered_Meta_iNat', 'Tiered_Mini_ImageNet', 'Pascal_VOC', 'Paintings' #CAML meta-test
+                                              ],
                         default="cifar_fs",
                         help="Which few-shot dataset.")
 

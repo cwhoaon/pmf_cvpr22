@@ -84,57 +84,53 @@ def main(args):
     criterion = torch.nn.CrossEntropyLoss()
     #datasets = ['mscoco', 'traffic_sign', 'ilsvrc_2012', 'omniglot', 'aircraft', 'cu_birds', 'dtd', 'quickdraw', 'fungi', 'vgg_flower']
     datasets = args.test_sources
-    var_accs = {}
+    # var_accs = {}
 
-    for domain in datasets:
-        print(f'\n# Testing {domain} starts...\n')
+   
+    data_loader_val = get_test_loader(args)
 
-        args.test_sources = [domain]
-        data_loader_val = get_test_loader(args)
-
-        # validate lr
-        best_lr = args.ada_lr
-        if args.deploy == 'finetune':
-            print("Start selecting the best lr...")
-            best_acc = 0
-            for lr in [0, 0.0001, 0.001, 0.01]:
-                model_without_ddp.lr = lr
-                test_stats = evaluate(data_loader_val, model, criterion, device, seed=1234, ep=5)
-                acc = test_stats['acc1']
-                print(f"*lr = {lr}: acc1 = {acc}")
-                if acc > best_acc:
-                    best_acc = acc
-                    best_lr = lr
-            model_without_ddp.lr = best_lr
-            print(f"### Selected lr = {best_lr}")
+    # validate lr
+    best_lr = args.ada_lr
+    if args.deploy == 'finetune':
+        print("Start selecting the best lr...")
+        best_acc = 0
+        for lr in [0, 0.0001, 0.001, 0.01]:
+            model_without_ddp.lr = lr
+            test_stats = evaluate(data_loader_val, model, criterion, device, seed=1234, ep=5)
+            acc = test_stats['acc1']
+            print(f"*lr = {lr}: acc1 = {acc}")
+            if acc > best_acc:
+                best_acc = acc
+                best_lr = lr
+        model_without_ddp.lr = best_lr
+        print(f"### Selected lr = {best_lr}")
 
 
-        # final classification
-        data_loader_val.generator.manual_seed(args.seed + 10000)
-        test_stats = evaluate(data_loader_val, model, criterion, device)
-        var_accs[domain] = (test_stats['acc1'], test_stats['acc_std'], best_lr)
+    # final classification
+    data_loader_val.generator.manual_seed(args.seed + 10000)
+    test_stats = evaluate(data_loader_val, model, criterion, device)
+    var_accs = (test_stats['acc1'], test_stats['acc_std'], best_lr)
 
-        print(f"{domain}: acc1 on {len(data_loader_val.dataset)} test images: {test_stats['acc1']:.1f}%")
+    print(f"acc1 on {len(data_loader_val.dataset)} test images: {test_stats['acc1']:.1f}%")
 
-        if args.output_dir and utils.is_main_process():
-            test_stats['domain'] = args.test_sources[0]
-            test_stats['lr'] = best_lr
-            with (output_dir / f"log_test_{args.deploy}_{args.train_tag}.txt").open("a") as f:
-                f.write(json.dumps(test_stats) + "\n")
+    if args.output_dir and utils.is_main_process():
+        test_stats['lr'] = best_lr
+        with (output_dir / f"log_test_{args.deploy}_{args.train_tag}.txt").open("a") as f:
+            f.write(json.dumps(test_stats) + "\n")
 
     # print results as a table
     if utils.is_main_process():
         rows = []
-        for dataset_name in datasets:
-            row = [dataset_name]
-            acc, std, lr = var_accs[dataset_name]
-            conf = (1.96 * std) / np.sqrt(len(data_loader_val.dataset))
-            row.append(f"{acc:0.2f} +- {conf:0.2f}")
-            row.append(f"{lr}")
-            rows.append(row)
+        row = []
+        acc, std, lr = var_accs
+        print('val_accs:', var_accs)
+        conf = (1.96 * std) / np.sqrt(len(data_loader_val.dataset))
+        row.append(f"{acc:0.2f} +- {conf:0.2f}")
+        row.append(f"{lr}")
+        rows.append(row)
         np.save(os.path.join(output_dir, f'test_results_{args.deploy}_{args.train_tag}.npy'), {'rows': rows})
 
-        table = tabulate(rows, headers=['Domain', args.arch, 'lr'], floatfmt=".2f")
+        table = tabulate(rows, headers=[args.arch, 'lr'], floatfmt=".4f")
         print(table)
         print("\n")
 
@@ -147,6 +143,7 @@ def main(args):
 
 
 if __name__ == '__main__':
+    start = time.time()
     parser = get_args_parser()
     args = parser.parse_args()
     args.train_tag = 'pt' if args.resume == '' else 'ep'
@@ -160,3 +157,5 @@ if __name__ == '__main__':
             f.write(" ".join(sys.argv) + "\n")
     
     main(args)
+    end = time.time()
+    print("Total time:", end - start)
