@@ -121,15 +121,15 @@ def _evaluate(data_loader, model, criterion, device, seed=None, ep=None):
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('n_ways', utils.SmoothedValue(window_size=1, fmt='{value:d}'))
     metric_logger.add_meter('n_imgs', utils.SmoothedValue(window_size=1, fmt='{value:d}'))
-    metric_logger.add_meter('acc1', utils.SmoothedValue(window_size=len(data_loader.dataset)))
-    metric_logger.add_meter('acc5', utils.SmoothedValue(window_size=len(data_loader.dataset)))
+    metric_logger.add_meter('acc1', utils.SmoothedValue(window_size=len(data_loader)))
+    metric_logger.add_meter('acc5', utils.SmoothedValue(window_size=len(data_loader)))
     header = 'Test:'
 
     # switch to evaluation mode
     model.eval()
 
-    if seed is not None:
-        data_loader.generator.manual_seed(seed)
+    # if seed is not None:
+    #     data_loader.generator.manual_seed(seed)
 
     for ii, batch in enumerate(metric_logger.log_every(data_loader, 10, header)):
         if ep is not None:

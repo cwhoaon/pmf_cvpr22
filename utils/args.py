@@ -25,9 +25,10 @@ def get_args_parser():
     #### Add CAML datasets
     parser.add_argument("--dataset", choices=["cifar_fs_elite", "cifar_fs", "mini_imagenet", "meta_dataset", #original
                                               'imagenet1k', 'mscoco', 'fungi', 'wikiart_artist', 'wikiart_genre', 'wikiart_style', #CAML meta-train
-                                              'Aircraft', 'ChestX', 'CUB_Fewshot', 'Meta_iNat', 'Tiered_Meta_iNat', 'Tiered_Mini_ImageNet', 'Pascal_VOC', 'Paintings' #CAML meta-test
+                                              'Aircraft', 'ChestX', 'CUB_Fewshot', 'Meta_iNat', 'Tiered_Meta_iNat', 'Tiered_Mini_ImageNet', 'Pascal_VOC', 'Paintings', #CAML meta-test
+                                              'use_all'
                                               ],
-                        default="cifar_fs",
+                        default="use_all",
                         help="Which few-shot dataset.")
 
     # Few-shot parameters (Mini-ImageNet & CIFAR-FS)

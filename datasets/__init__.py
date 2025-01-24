@@ -10,6 +10,7 @@ from .episodic_dataset import EpisodeDataset, EpisodeJSONDataset
 from .meta_val_dataset import MetaValDataset
 from .meta_h5_dataset import FullMetaDatasetH5
 from .meta_dataset.utils import Split
+from .combined_dataloader import CombinedDataLoader
 import torchvision.transforms as transforms
 
 def get_sets(args):
@@ -48,7 +49,6 @@ def get_sets(args):
         valTransform = trainTransform
         
         trainDir = f"./data/train_data/{args.dataset}/train"
-        print(trainDir)
         valDir = f"./data/train_data/{args.dataset}/val"
         inputW, inputH, nbCls = args.img_size, args.img_size, 64
 
@@ -86,7 +86,7 @@ def get_sets(args):
 ######################################################################
 
     else:
-        raise ValueError(f'{dataset} is not supported.')
+        raise ValueError(f'{args.dataset} is not supported.')
 
     # If not meta_dataset
     if args.dataset in ['cifar_fs', 'cifar_fs_elite', 'mini_imagenet']:
@@ -160,7 +160,6 @@ def get_loaders(args, num_tasks, global_rank):
         dataset_vals = {'single': dataset_vals}
 
     data_loader_val = {}
-
     for j, (source, dataset_val) in enumerate(dataset_vals.items()):
         if args.distributed:
             if args.dist_eval:
@@ -223,6 +222,30 @@ def get_loaders(args, num_tasks, global_rank):
 
     return data_loader_train, data_loader_val
 
+# returns list of every data loaders
+def get_every_loaders(args, num_tasks, global_rank):
+    if args.dataset != 'use_all':
+        return get_loaders(args, num_tasks, global_rank)
+    
+    dataset_spec = [('imagenet1k', 5, 5), ('imagenet1k', 5, 1),
+                ('wikiart_style', 5, 5), ('wikiart_style', 5, 1),
+                ('wikiart_genre', 5, 5), ('wikiart_genre', 5, 1), 
+                ('mscoco', 5, 5), ('mscoco', 5, 1),
+                ('wikiart_artist', 5, 5), ('wikiart_artist', 5, 1)
+                ]
+    rtn_trains = []
+    rtn_vals = []
+    
+    for dataset, way, shot in dataset_spec:
+        args.nClsEpisode = way
+        args.nSupport = shot
+        args.dataset = dataset
+        print(args.dataset, args.nClsEpisode, args.nSupport)
+        train_loader, val_loader = get_loaders(args, num_tasks, global_rank)
+        rtn_trains.append(train_loader)
+        rtn_vals.append(val_loader)
+    
+    return CombinedDataLoader(rtn_trains), CombinedDataLoader(rtn_vals)
 
 def get_bscd_loader(dataset="EuroSAT", test_n_way=5, n_shot=5, image_size=224):
     iter_num = 600
