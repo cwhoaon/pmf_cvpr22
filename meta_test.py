@@ -8,6 +8,7 @@ import json
 
 from pathlib import Path
 from tabulate import tabulate
+from pprint import pprint
 
 from engine import evaluate
 import utils.deit_util as utils
@@ -16,6 +17,24 @@ from utils.args import get_args_parser
 from models import get_model
 from datasets import get_loaders
 
+
+
+def get_every_test_loader(args):
+    ## Have to change this before uploading to git
+    testsets = ['cifar_fs', 'mini_imagenet', 'Aircraft', 'ChestX', 'CUB', 'Meta_iNat', 'Tiered_Meta_iNat', 'Tiered_Mini_ImageNet', 'Pascal', 'Paintings', 'Pascal+Paintings']
+    # testsets = ['Pascal+Paintings']
+    
+    test_loaders = []
+    for testset in testsets:
+        for shot in [1, 5]:
+            args.nClsEpisode = 5
+            args.nSupport = shot
+            args.dataset = testset
+            test_loader = get_test_loader(args)
+            test_loaders.append((test_loader, testset, 5, shot))
+    
+    return test_loaders
+    
 
 def get_test_loader(args):
     num_tasks = utils.get_world_size()
@@ -30,7 +49,6 @@ def get_test_loader(args):
 
         generator = torch.Generator()
         generator.manual_seed(args.seed + 10000)
-
         data_loader_val = torch.utils.data.DataLoader(
             dataset_val, sampler=sampler_val,
             batch_size=1,
@@ -40,7 +58,6 @@ def get_test_loader(args):
             generator=generator
         )
     return data_loader_val
-
 
 def main(args):
     utils.init_distributed_mode(args)
@@ -82,55 +99,60 @@ def main(args):
     ##############################################
     # Test
     criterion = torch.nn.CrossEntropyLoss()
-    #datasets = ['mscoco', 'traffic_sign', 'ilsvrc_2012', 'omniglot', 'aircraft', 'cu_birds', 'dtd', 'quickdraw', 'fungi', 'vgg_flower']
-    datasets = args.test_sources
-    # var_accs = {}
-
+    # datasets = args.test_sources
+    var_accs = {}
    
-    data_loader_val = get_test_loader(args)
+    data_loaders = get_every_test_loader(args)
+    
+    for data_loader_val, domain, way, shot in data_loaders:
+        print(f"Testing {domain} {way}w-{shot}s start...")
+        
+        # validate lr
+        best_lr = args.ada_lr
+        if args.deploy == 'finetune':
+            print("Start selecting the best lr...")
+            best_acc = 0
+            for lr in [0, 0.0001, 0.001, 0.01]:
+                model_without_ddp.lr = lr
+                test_stats = evaluate(data_loader_val, model, criterion, device, seed=1234, ep=5)
+                acc = test_stats['acc1']
+                print(f"*lr = {lr}: acc1 = {acc}")
+                if acc > best_acc:
+                    best_acc = acc
+                    best_lr = lr
+            model_without_ddp.lr = best_lr
+            print(f"### Selected lr = {best_lr}")
 
-    # validate lr
-    best_lr = args.ada_lr
-    if args.deploy == 'finetune':
-        print("Start selecting the best lr...")
-        best_acc = 0
-        for lr in [0, 0.0001, 0.001, 0.01]:
-            model_without_ddp.lr = lr
-            test_stats = evaluate(data_loader_val, model, criterion, device, seed=1234, ep=5)
-            acc = test_stats['acc1']
-            print(f"*lr = {lr}: acc1 = {acc}")
-            if acc > best_acc:
-                best_acc = acc
-                best_lr = lr
-        model_without_ddp.lr = best_lr
-        print(f"### Selected lr = {best_lr}")
 
+        # final classification
+        data_loader_val.generator.manual_seed(args.seed + 10000)
+        test_stats = evaluate(data_loader_val, model, criterion, device)
+        var_accs[(domain, way, shot)] = (test_stats['acc1'], test_stats['acc_std'], best_lr)
 
-    # final classification
-    data_loader_val.generator.manual_seed(args.seed + 10000)
-    test_stats = evaluate(data_loader_val, model, criterion, device)
-    var_accs = (test_stats['acc1'], test_stats['acc_std'], best_lr)
+        print(f"{domain}: acc1 on {len(data_loader_val.dataset)} test images: {test_stats['acc1']:.1f}%")
 
-    print(f"acc1 on {len(data_loader_val.dataset)} test images: {test_stats['acc1']:.1f}%")
-
-    if args.output_dir and utils.is_main_process():
-        test_stats['lr'] = best_lr
-        with (output_dir / f"log_test_{args.deploy}_{args.train_tag}.txt").open("a") as f:
-            f.write(json.dumps(test_stats) + "\n")
+        if args.output_dir and utils.is_main_process():
+            test_stats['domain'] = f"{domain} {way}w-{shot}s"
+            test_stats['lr'] = best_lr
+            test_stats['conf'] = (1.96 * test_stats['acc_std']) / np.sqrt(len(data_loader_val.dataset))
+            with (output_dir / f"log_test_{args.deploy}_{args.train_tag}.txt").open("a") as f:
+                f.write(json.dumps(test_stats) + "\n")
+        print()
 
     # print results as a table
     if utils.is_main_process():
         rows = []
-        row = []
-        acc, std, lr = var_accs
-        print('val_accs:', var_accs)
-        conf = (1.96 * std) / np.sqrt(len(data_loader_val.dataset))
-        row.append(f"{acc:0.2f} +- {conf:0.2f}")
-        row.append(f"{lr}")
-        rows.append(row)
+        for data_loader_val, dataset_name, way, shot in data_loaders:
+            row = [f"{dataset_name} {way}w-{shot}s"]
+            
+            acc, std, lr = var_accs[(dataset_name, way, shot)]
+            conf = (1.96 * std) / np.sqrt(len(data_loader_val.dataset))
+            row.append(f"{acc:0.2f} +- {conf:0.2f}")
+            row.append(f"{lr}")
+            rows.append(row)
         np.save(os.path.join(output_dir, f'test_results_{args.deploy}_{args.train_tag}.npy'), {'rows': rows})
 
-        table = tabulate(rows, headers=[args.arch, 'lr'], floatfmt=".4f")
+        table = tabulate(rows, headers=['Domain', args.arch, 'lr'], floatfmt=".4f")
         print(table)
         print("\n")
 

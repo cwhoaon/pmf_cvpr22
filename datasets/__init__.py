@@ -14,14 +14,14 @@ from .combined_dataloader import CombinedDataLoader
 import torchvision.transforms as transforms
 
 def get_sets(args):
-    if args.dataset == 'cifar_fs':
-        from .cifar_fs import dataset_setting
-    elif args.dataset == 'cifar_fs_elite': # + elite data augmentation
-        from .cifar_fs_elite import dataset_setting
-    elif args.dataset == 'mini_imagenet':
-        from .mini_imagenet import dataset_setting
+    # if args.dataset == 'cifar_fs':
+    #     from .cifar_fs import dataset_setting
+    # elif args.dataset == 'cifar_fs_elite': # + elite data augmentation
+    #     from .cifar_fs_elite import dataset_setting
+    # elif args.dataset == 'mini_imagenet':
+    #     from .mini_imagenet import dataset_setting
     
-    elif args.dataset == 'meta_dataset':
+    if args.dataset == 'meta_dataset':
         if args.eval:
             trainSet = valSet = None
             testSet = FullMetaDatasetH5(args, Split.TEST)
@@ -30,7 +30,7 @@ def get_sets(args):
             valSet = {}
             for source in args.val_sources:
                 valSet[source] = MetaValDataset(os.path.join(args.data_path, source,
-                                                             f'val_ep{args.nValEpisode}_img{args.image_size}.h5'),
+                                                            f'val_ep{args.nValEpisode}_img{args.image_size}.h5'),
                                                 num_episodes=args.nValEpisode)
             testSet = None
         
@@ -54,7 +54,7 @@ def get_sets(args):
 
 
 ##################### CAML meta test datasetting #####################
-    elif args.dataset in ['Aircraft', 'ChestX', 'CUB_Fewshot', 'Meta_iNat', 'Tiered_Meta_iNat', 'Tiered_Mini_ImageNet', 'Pascal_VOC', 'Paintings']:
+    elif args.dataset in ['cifar_fs', 'mini_imagenet', 'Aircraft', 'ChestX', 'CUB', 'Meta_iNat', 'Tiered_Meta_iNat', 'Tiered_Mini_ImageNet', 'Pascal', 'Paintings', 'Pascal+Paintings']:
         mean = [0.4815, 0.4578, 0.4082]
         std = [0.2686, 0.2613, 0.2758]
         normalize = transforms.Normalize(mean=mean, std=std)
@@ -68,18 +68,24 @@ def get_sets(args):
             testset = 'Aircraft_fewshot'
         elif args.dataset == 'ChestX':
             testset = 'ChestX'
-        elif args.dataset == 'CUB_Fewshot':
+        elif args.dataset == 'cifar_fs':
+            testset = 'cifar-fs'
+        elif args.dataset == 'CUB':
             testset = 'CUB_fewshot_raw'
-        elif args.datast == 'Meta_iNat':
+        elif args.dataset == 'Meta_iNat':
             testset = 'meta_iNat'
-        elif args.datast == 'Tiered_Meta_iNat':
+        elif args.dataset == 'mini_imagenet':
+            testset = 'mini-ImageNet'
+        elif args.dataset == 'Tiered_Meta_iNat':
             testset = 'tiered_meta_iNat'
-        elif args.datast == 'Tiered_Mini_ImageNet':
+        elif args.dataset == 'Tiered_Mini_ImageNet':
             testset = 'tiered-ImageNet_DeepEMD'
-        elif args.datast == 'Pascal_VOC':
-            testset = 'v2_pascal'
-        elif args.datast == 'Paintings':
+        elif args.dataset == 'Paintings':
             testset = 'v2_paintings'
+        elif args.dataset == 'Pascal':
+            testset = 'v2_pascal'
+        elif args.dataset == 'Pascal+Paintings':
+            testset = 'v2_pascal_paintings'
         
         testDir = f"./data/test_data/{testset}/test"
         inputW, inputH, nbCls = args.img_size, args.img_size, 64
@@ -89,10 +95,10 @@ def get_sets(args):
         raise ValueError(f'{args.dataset} is not supported.')
 
     # If not meta_dataset
-    if args.dataset in ['cifar_fs', 'cifar_fs_elite', 'mini_imagenet']:
-        trainTransform, valTransform, inputW, inputH, \
-        trainDir, valDir, testDir, episodeJson, nbCls = \
-                dataset_setting(args.nSupport, args.img_size)
+    # if args.dataset in ['cifar_fs', 'cifar_fs_elite', 'mini_imagenet']:
+    #     trainTransform, valTransform, inputW, inputH, \
+    #     trainDir, valDir, testDir, episodeJson, nbCls = \
+    #             dataset_setting(args.nSupport, args.img_size)
     
     trainSet, valSet, testSet = None, None, None
     
@@ -114,7 +120,7 @@ def get_sets(args):
                                     transform = valTransform,
                                     inputW = inputW,
                                     inputH = inputH,
-                                    nEpisode = 1000)
+                                    nEpisode = 200)
         
         else:
             valSet = EpisodeJSONDataset(episodeJson,
@@ -130,7 +136,8 @@ def get_sets(args):
                                 transform = valTransform,
                                 inputW = inputW,
                                 inputH = inputH,
-                                nEpisode = args.nEpisode)
+                                nEpisode = args.nEpisode
+                                )
     
 
     return trainSet, valSet, testSet
@@ -222,16 +229,17 @@ def get_loaders(args, num_tasks, global_rank):
 
     return data_loader_train, data_loader_val
 
-# returns list of every data loaders
+# returns combined loaders for all datasets
 def get_every_loaders(args, num_tasks, global_rank):
     if args.dataset != 'use_all':
         return get_loaders(args, num_tasks, global_rank)
     
-    dataset_spec = [('imagenet1k', 5, 5), ('imagenet1k', 5, 1),
-                ('wikiart_style', 5, 5), ('wikiart_style', 5, 1),
-                ('wikiart_genre', 5, 5), ('wikiart_genre', 5, 1), 
-                ('mscoco', 5, 5), ('mscoco', 5, 1),
-                ('wikiart_artist', 5, 5), ('wikiart_artist', 5, 1)
+    dataset_spec = [('imagenet1k', 5, 5),
+                    ('fungi', 5, 5),
+                ('wikiart_style', 5, 5),
+                ('wikiart_genre', 5, 5),
+                ('mscoco', 5, 5),
+                ('wikiart_artist', 5, 5),
                 ]
     rtn_trains = []
     rtn_vals = []
@@ -240,7 +248,6 @@ def get_every_loaders(args, num_tasks, global_rank):
         args.nClsEpisode = way
         args.nSupport = shot
         args.dataset = dataset
-        print(args.dataset, args.nClsEpisode, args.nSupport)
         train_loader, val_loader = get_loaders(args, num_tasks, global_rank)
         rtn_trains.append(train_loader)
         rtn_vals.append(val_loader)

@@ -36,6 +36,7 @@ class EpisodeDataset(data.Dataset):
         self.nQuery = nQuery
         self.transform = transform
         self.nEpisode = nEpisode
+        self.min_query_per_clasee = min(self.nQuery, 5)
 
         floatType = torch.FloatTensor
         intType = torch.LongTensor
@@ -65,12 +66,16 @@ class EpisodeDataset(data.Dataset):
         """
         # select nCls from clsList
         clsEpisode = np.random.choice(self.clsList, self.nCls, replace=False)
+        
         for i, cls in enumerate(clsEpisode) :
             clsPath = os.path.join(self.imgDir, cls)
             imgList = os.listdir(clsPath)
 
             # in total nQuery+nSupport images from each class
-            imgCls = np.random.choice(imgList, self.nQuery + self.nSupport, replace=False)
+            imgCls = np.random.choice(imgList, min(len(imgList), self.nQuery + self.nSupport), replace=False)
+            if len(imgList) < self.nQuery + self.nSupport:
+                imgCls_overlap = np.random.choice(imgList, self.nQuery + self.nQuery - len(imgList), replace=True)
+                imgCls = np.concatenate((imgCls, imgCls_overlap), axis=0)
 
             for j in range(self.nSupport) :
                 img = imgCls[j]

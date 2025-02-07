@@ -12,7 +12,8 @@ def get_backbone(args):
         model = timm.create_model("vit_base_patch16_clip_224.openai",
                             pretrained=True,
                             img_size=224,
-                            num_classes=0)
+                            num_classes=0,
+                            cache_dir="/data3/.cache/huggingface/hub/models").train()
         print("Pre-trained CLIP (CAML architecture) is loaded")
     #########################################################
     
